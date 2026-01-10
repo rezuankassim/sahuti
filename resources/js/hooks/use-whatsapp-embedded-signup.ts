@@ -1,4 +1,4 @@
-import { admin } from '@/routes';
+import admin from '@/routes/admin';
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -188,7 +188,7 @@ export function useWhatsAppEmbeddedSignup() {
         }
 
         router.post(
-            admin.businesses.whatsapp.disconnect(businessId).url(),
+            admin.businesses.whatsapp.disconnect(businessId).url,
             {},
             {
                 preserveScroll: true,
