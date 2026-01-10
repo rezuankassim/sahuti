@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\OnboardingService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -9,7 +10,8 @@ use Illuminate\Support\Facades\Log;
 class WhatsAppWebhookController extends Controller
 {
     public function __construct(
-        protected WhatsAppService $whatsAppService
+        protected WhatsAppService $whatsAppService,
+        protected OnboardingService $onboardingService
     ) {}
 
     /**
@@ -79,7 +81,7 @@ class WhatsAppWebhookController extends Controller
     }
 
     /**
-     * Process incoming message and send auto-reply
+     * Process incoming message and handle onboarding or send auto-reply
      */
     protected function handleMessage(array $messageData): void
     {
@@ -95,8 +97,31 @@ class WhatsAppWebhookController extends Controller
 
             Log::info('Inbound message logged', ['message_id' => $inboundMessage->message_id]);
 
-            // Send auto-reply "Hello"
             $from = $messageData['from'];
+            $messageType = $messageData['type'];
+
+            // Only process text messages
+            if ($messageType !== 'text') {
+                return;
+            }
+
+            $messageText = $messageData['text']['body'] ?? '';
+
+            // Check if user wants to start onboarding
+            if (strtoupper(trim($messageText)) === 'ONBOARDING') {
+                $this->onboardingService->startOnboarding($from);
+
+                return;
+            }
+
+            // Check if user has an active onboarding state
+            if ($this->onboardingService->hasActiveOnboarding($from)) {
+                $this->onboardingService->processResponse($from, $messageText);
+
+                return;
+            }
+
+            // Default: Send auto-reply "Hello"
             $outboundMessage = $this->whatsAppService->sendMessage($from, 'Hello');
 
             if ($outboundMessage) {
