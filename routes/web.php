@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\BusinessController;
+use App\Http\Controllers\PrivacyPolicyController;
 use App\Http\Controllers\WhatsAppEmbeddedSignupController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -12,6 +13,9 @@ Route::get('/', function () {
         'canRegister' => Features::enabled(Features::registration()),
     ]);
 })->name('home');
+
+// Privacy Policy
+Route::get('/privacy-policy', [PrivacyPolicyController::class, 'show'])->name('privacy-policy');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', function () {

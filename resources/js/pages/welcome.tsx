@@ -1,4 +1,4 @@
-import { dashboard, login, register } from '@/routes';
+import { dashboard, login, privacyPolicy, register } from '@/routes';
 import { type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 
@@ -801,6 +801,16 @@ export default function Welcome({
                         </div>
                     </main>
                 </div>
+                <footer className="mt-8 w-full max-w-[335px] text-center text-sm text-[#706f6c] lg:max-w-4xl dark:text-[#A1A09A]">
+                    <Link
+                        href={privacyPolicy()}
+                        className="hover:text-[#1b1b18] hover:underline dark:hover:text-[#EDEDEC]"
+                    >
+                        Privacy Policy
+                    </Link>
+                    <span className="mx-2">•</span>
+                    <span>© {new Date().getFullYear()} Sahuti</span>
+                </footer>
                 <div className="hidden h-14.5 lg:block"></div>
             </div>
         </>
