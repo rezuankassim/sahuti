@@ -42,4 +42,12 @@ return [
         'app_secret' => env('WHATSAPP_APP_SECRET'),
     ],
 
+    'llm' => [
+        'enabled' => env('LLM_ENABLED', true),
+        'provider' => env('LLM_PROVIDER', 'openai'),
+        'model' => env('LLM_MODEL', 'gpt-4o-mini'),
+        'max_tokens' => env('LLM_MAX_TOKENS', 500),
+        'temperature' => env('LLM_TEMPERATURE', 0.3),
+    ],
+
 ];

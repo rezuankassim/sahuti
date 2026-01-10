@@ -4,9 +4,14 @@ namespace App\Services;
 
 use App\Models\Business;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class AutoReplyService
 {
+    public function __construct(
+        protected LLMService $llmService
+    ) {}
+
     protected array $keywordMap = [
         'PRICE' => ['harga', 'price', 'berapa', 'cost'],
         'AREA' => ['area', 'kawasan', 'location', 'lokasi'],
@@ -27,13 +32,32 @@ class AutoReplyService
         // Detect intents from message
         $detectedIntents = $this->detectIntents($message);
 
-        if (empty($detectedIntents)) {
-            // No recognized intent, send generic greeting
-            return "Hello! How can we help you today?\n\nYou can ask about:\n• Our services and prices\n• Areas we cover\n• Operating hours\n• How to book";
+        // If strong keyword match, use rule-based reply
+        if (! empty($detectedIntents)) {
+            Log::info('Using rule-based reply', ['intents' => $detectedIntents]);
+
+            return $this->bundleReplies($detectedIntents, $business);
         }
 
-        // Bundle replies (max 3 sections)
-        return $this->bundleReplies($detectedIntents, $business);
+        // No keyword match - try LLM if enabled
+        if ($business->llm_enabled && $this->llmService->isAvailable()) {
+            Log::info('No keyword match, trying LLM', ['message' => $message]);
+
+            $llmResult = $this->llmService->generateReply($business, $message);
+
+            if ($llmResult['success'] && ! $llmResult['escalation_needed']) {
+                return $llmResult['reply'];
+            }
+
+            if ($llmResult['escalation_needed']) {
+                return "Thank you for your message! This requires a personal response. We'll get back to you shortly!";
+            }
+        }
+
+        // Fallback: generic greeting
+        Log::info('Using fallback generic reply');
+
+        return "Hello! How can we help you today?\n\nYou can ask about:\n• Our services and prices\n• Areas we cover\n• Operating hours\n• How to book";
     }
 
     /**
