@@ -124,10 +124,10 @@ class OnboardingService
     {
         return match ($step) {
             OnboardingState::STEP_NAME => "Welcome to Sahuti! 🎉\n\nLet's get your business set up. What's your business name?",
-            OnboardingState::STEP_SERVICES => "Great! What services do you offer?\n\n(You can list them separated by commas)",
-            OnboardingState::STEP_AREAS => "Which areas do you cover?\n\n(List areas separated by commas)",
-            OnboardingState::STEP_HOURS => "What are your operating hours?\n\n(e.g., Mon-Fri 9AM-5PM, Sat 10AM-2PM)",
-            OnboardingState::STEP_BOOKING => 'How should customers book appointments with you?',
+            OnboardingState::STEP_SERVICES => "Great! What services do you offer?\n\n(Format: Service Name - Price)\n\nExample:\nCleaning - 50\nDeep Clean - 100\n\nList one per line.",
+            OnboardingState::STEP_AREAS => "Which areas do you cover?\n\n(List areas separated by commas)\n\nExample: Kuala Lumpur, Petaling Jaya, Selangor",
+            OnboardingState::STEP_HOURS => "What are your operating hours?\n\n(Format: Day: Start-End)\n\nExample:\nMonday: 09:00-18:00\nTuesday: 09:00-18:00\nSaturday: Closed\n\nList each day on a new line.",
+            OnboardingState::STEP_BOOKING => 'How should customers book appointments with you?\n\nExample: Call us at 012-345-6789 or WhatsApp to book!',
             default => 'Invalid step',
         };
     }
@@ -153,16 +153,31 @@ class OnboardingService
     protected function generateSummary(array $data): string
     {
         $name = $data[OnboardingState::STEP_NAME] ?? 'N/A';
-        $services = $data[OnboardingState::STEP_SERVICES] ?? 'N/A';
-        $areas = $data[OnboardingState::STEP_AREAS] ?? 'N/A';
-        $hours = $data[OnboardingState::STEP_HOURS] ?? 'N/A';
+        $servicesText = $data[OnboardingState::STEP_SERVICES] ?? 'N/A';
+        $areasText = $data[OnboardingState::STEP_AREAS] ?? 'N/A';
+        $hoursText = $data[OnboardingState::STEP_HOURS] ?? 'N/A';
         $booking = $data[OnboardingState::STEP_BOOKING] ?? 'N/A';
+
+        // Format services for display
+        $services = str_replace("\n", "\n• ", $servicesText);
+        if (! str_starts_with($services, '•')) {
+            $services = "• {$services}";
+        }
+
+        // Format areas for display
+        $areas = $areasText;
+
+        // Format hours for display
+        $hours = str_replace("\n", "\n• ", $hoursText);
+        if (! str_starts_with($hours, '•')) {
+            $hours = "• {$hours}";
+        }
 
         return "📋 *Business Profile Summary*\n\n".
             "🏢 *Business Name:* {$name}\n\n".
-            "💼 *Services:* {$services}\n\n".
+            "💼 *Services:*\n{$services}\n\n".
             "📍 *Coverage Areas:* {$areas}\n\n".
-            "🕐 *Operating Hours:* {$hours}\n\n".
+            "🕐 *Operating Hours:*\n{$hours}\n\n".
             "📅 *Booking Method:* {$booking}\n\n".
             "---\n\n".
             "Is this correct?\n\n".
@@ -213,16 +228,57 @@ class OnboardingService
      */
     protected function saveBusinessProfile(string $phoneNumber, array $data): void
     {
-        // Parse services and areas from comma-separated strings
-        $services = array_map('trim', explode(',', $data[OnboardingState::STEP_SERVICES] ?? ''));
+        // Parse services with prices (Format: "Service Name - Price")
+        $servicesText = $data[OnboardingState::STEP_SERVICES] ?? '';
+        $services = [];
+        foreach (explode("\n", $servicesText) as $line) {
+            $line = trim($line);
+            if (empty($line)) {
+                continue;
+            }
+            // Parse "Service Name - Price"
+            if (preg_match('/^(.+?)\s*-\s*(.+)$/', $line, $matches)) {
+                $services[] = [
+                    'name' => trim($matches[1]),
+                    'price' => trim($matches[2]),
+                ];
+            }
+        }
+
+        // Parse areas from comma-separated strings
         $areas = array_map('trim', explode(',', $data[OnboardingState::STEP_AREAS] ?? ''));
+        $areas = array_filter($areas); // Remove empty values
+
+        // Parse operating hours (Format: "Day: HH:MM-HH:MM" or "Day: Closed")
+        $hoursText = $data[OnboardingState::STEP_HOURS] ?? '';
+        $operatingHours = [];
+        foreach (explode("\n", $hoursText) as $line) {
+            $line = trim($line);
+            if (empty($line)) {
+                continue;
+            }
+            // Parse "Day: HH:MM-HH:MM" or "Day: Closed"
+            if (preg_match('/^(\w+)\s*:\s*(.+)$/i', $line, $matches)) {
+                $day = strtolower(trim($matches[1]));
+                $time = trim($matches[2]);
+
+                if (stripos($time, 'closed') !== false) {
+                    $operatingHours[$day] = ['closed' => true];
+                } elseif (preg_match('/^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/', $time, $timeMatches)) {
+                    $operatingHours[$day] = [
+                        'open' => $timeMatches[1],
+                        'close' => $timeMatches[2],
+                    ];
+                }
+            }
+        }
 
         Business::create([
             'phone_number' => $phoneNumber,
             'name' => $data[OnboardingState::STEP_NAME] ?? '',
             'services' => $services,
-            'areas' => $areas,
-            'operating_hours' => ['text' => $data[OnboardingState::STEP_HOURS] ?? ''],
+            'areas' => array_values($areas),
+            'operating_hours' => $operatingHours,
             'booking_method' => $data[OnboardingState::STEP_BOOKING] ?? '',
             'profile_data' => $data,
             'is_onboarded' => true,

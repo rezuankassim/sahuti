@@ -100,6 +100,33 @@ Ensure your business has completed onboarding with:
 - ✅ Operating hours
 - ✅ Booking method
 
+### Onboarding Format
+
+The onboarding questionnaire has been updated to collect data in the format required by auto-replies:
+
+**Services** - Format: `Service Name - Price` (one per line)
+```
+Cleaning - 50
+Deep Clean - 100
+```
+
+**Areas** - Format: Comma-separated list
+```
+Kuala Lumpur, Petaling Jaya, Selangor
+```
+
+**Operating Hours** - Format: `Day: HH:MM-HH:MM` or `Day: Closed` (one per line)
+```
+Monday: 09:00-18:00
+Tuesday: 09:00-18:00
+Saturday: Closed
+```
+
+**Booking Method** - Free text
+```
+Call us at 012-345-6789 or WhatsApp to book!
+```
+
 ## Testing
 
 Run auto-reply tests:
@@ -171,9 +198,12 @@ We'll get back to you during business hours!
 
 ## Files Changed
 
-- `database/migrations/2026_01_10_103619_create_conversation_pauses_table.php`
-- `app/Models/ConversationPause.php`
-- `app/Services/AutoReplyService.php`
-- `app/Services/WhatsAppService.php` (added `sendManualReply` method)
-- `app/Http/Controllers/WhatsAppWebhookController.php`
-- `tests/Feature/AutoReplyTest.php`
+- `database/migrations/2026_01_10_103619_create_conversation_pauses_table.php` - New
+- `app/Models/ConversationPause.php` - New
+- `app/Services/AutoReplyService.php` - New
+- `app/Services/OnboardingService.php` - Updated to collect structured data
+- `app/Services/WhatsAppService.php` - Added `sendManualReply` method
+- `app/Http/Controllers/WhatsAppWebhookController.php` - Updated to use auto-reply service
+- `tests/Feature/AutoReplyTest.php` - New
+- `tests/Feature/OnboardingTest.php` - Updated for new data format
+- `AUTO_REPLY.md` - New documentation

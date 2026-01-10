@@ -98,9 +98,9 @@ test('can confirm and save business profile', function () {
         'current_step' => OnboardingState::STEP_CONFIRM,
         'collected_data' => [
             OnboardingState::STEP_NAME => 'Test Business',
-            OnboardingState::STEP_SERVICES => 'Plumbing, Electrical',
+            OnboardingState::STEP_SERVICES => "Plumbing - 50\nElectrical - 100",
             OnboardingState::STEP_AREAS => 'New York, Brooklyn',
-            OnboardingState::STEP_HOURS => 'Mon-Fri 9AM-5PM',
+            OnboardingState::STEP_HOURS => "Monday: 09:00-17:00\nFriday: 09:00-17:00",
             OnboardingState::STEP_BOOKING => 'Call us',
         ],
         'is_complete' => false,
@@ -115,8 +115,15 @@ test('can confirm and save business profile', function () {
     expect(Business::where('phone_number', $phoneNumber)->exists())->toBeTrue();
     $business = Business::where('phone_number', $phoneNumber)->first();
     expect($business->name)->toBe('Test Business');
-    expect($business->services)->toBe(['Plumbing', 'Electrical']);
+    expect($business->services)->toBe([
+        ['name' => 'Plumbing', 'price' => '50'],
+        ['name' => 'Electrical', 'price' => '100'],
+    ]);
     expect($business->areas)->toBe(['New York', 'Brooklyn']);
+    expect($business->operating_hours)->toBe([
+        'monday' => ['open' => '09:00', 'close' => '17:00'],
+        'friday' => ['open' => '09:00', 'close' => '17:00'],
+    ]);
     expect($business->is_onboarded)->toBeTrue();
 
     $state = OnboardingState::where('phone_number', $phoneNumber)->first();
