@@ -20,10 +20,45 @@ class AutoReplyService
     ];
 
     /**
+     * Generate fallback menu
+     */
+    public function generateFallbackMenu(): string
+    {
+        return "Thank you for your message!\n\n".
+            "Quick menu:\n".
+            "1️⃣ Services & Prices\n".
+            "2️⃣ Coverage Areas\n".
+            "3️⃣ Operating Hours\n".
+            "4️⃣ How to Book\n\n".
+            'Reply with a number or ask your question.';
+    }
+
+    /**
+     * Handle menu selection (1-4)
+     */
+    public function handleMenuSelection(string $message, Business $business): ?string
+    {
+        $selection = trim($message);
+
+        return match ($selection) {
+            '1' => $this->generatePriceReply($business),
+            '2' => $this->generateAreaReply($business),
+            '3' => $this->generateHoursReply($business),
+            '4' => $this->generateBookingReply($business),
+            default => null,
+        };
+    }
+
+    /**
      * Generate auto-reply based on customer message
      */
     public function generateReply(string $message, Business $business): ?string
     {
+        // Check for menu selection (1-4)
+        if (in_array(trim($message), ['1', '2', '3', '4'])) {
+            return $this->handleMenuSelection($message, $business);
+        }
+
         // Check if business is outside operating hours
         if ($this->isAfterHours($business)) {
             return $this->generateAfterHoursReply($business);

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AutoReplyLog;
 use App\Models\Business;
 use App\Models\ConversationPause;
 use App\Services\AutoReplyService;
 use App\Services\OnboardingService;
+use App\Services\RateLimiterService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -15,7 +17,8 @@ class WhatsAppWebhookController extends Controller
     public function __construct(
         protected WhatsAppService $whatsAppService,
         protected OnboardingService $onboardingService,
-        protected AutoReplyService $autoReplyService
+        protected AutoReplyService $autoReplyService,
+        protected RateLimiterService $rateLimiter
     ) {}
 
     /**
@@ -132,6 +135,16 @@ class WhatsAppWebhookController extends Controller
                 return;
             }
 
+            // Check rate limit (max 1 reply / 90 seconds)
+            if ($this->rateLimiter->isRateLimited($from)) {
+                Log::info('Customer rate limited, skipping auto-reply', [
+                    'from' => $from,
+                    'cooldown_remaining' => $this->rateLimiter->getRemainingCooldown($from),
+                ]);
+
+                return;
+            }
+
             // Find business profile
             $businessPhoneId = config('services.whatsapp.phone_number_id');
 
@@ -150,15 +163,37 @@ class WhatsAppWebhookController extends Controller
             }
 
             // Generate and send auto-reply
+            $startTime = microtime(true);
             $replyMessage = $this->autoReplyService->generateReply($messageText, $business);
+            $duration = (int) ((microtime(true) - $startTime) * 1000);
+
+            // Determine reply type
+            $replyType = $this->determineReplyType($messageText, $replyMessage);
 
             if ($replyMessage) {
                 $outboundMessage = $this->whatsAppService->sendMessage($from, $replyMessage);
 
                 if ($outboundMessage) {
+                    // Set rate limit cooldown
+                    $this->rateLimiter->setCooldown($from);
+
+                    // Log reply
+                    AutoReplyLog::create([
+                        'customer_phone' => $from,
+                        'business_id' => $business->id,
+                        'message_text' => $messageText,
+                        'reply_text' => $replyMessage,
+                        'reply_type' => $replyType,
+                        'rate_limited' => false,
+                        'duration_ms' => $duration,
+                    ]);
+
                     Log::info('Auto-reply sent successfully', [
-                        'to' => $from,
+                        'customer_phone' => $from,
+                        'business' => $business->name,
                         'message_id' => $outboundMessage->message_id,
+                        'reply_type' => $replyType,
+                        'duration_ms' => $duration,
                     ]);
                 } else {
                     Log::error('Failed to send auto-reply', ['to' => $from]);
@@ -170,6 +205,41 @@ class WhatsAppWebhookController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
         }
+    }
+
+    /**
+     * Determine reply type from message and reply content
+     */
+    protected function determineReplyType(string $message, string $reply): string
+    {
+        // Check if after-hours
+        if (str_contains($reply, 'currently closed')) {
+            return 'after_hours';
+        }
+
+        // Check if fallback menu
+        if (str_contains($reply, 'Quick menu')) {
+            return 'fallback';
+        }
+
+        // Check if menu selection
+        if (in_array(trim($message), ['1', '2', '3', '4'])) {
+            return 'menu_selection';
+        }
+
+        // Check if escalation
+        if (str_contains($reply, 'personal response')) {
+            return 'escalation';
+        }
+
+        // Check if rule-based (contains emoji markers)
+        if (str_contains($reply, '💰') || str_contains($reply, '📍') ||
+            str_contains($reply, '🕐') || str_contains($reply, '📅')) {
+            return 'rule';
+        }
+
+        // Otherwise assume LLM
+        return 'llm';
     }
 
     /**
