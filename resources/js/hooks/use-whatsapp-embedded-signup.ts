@@ -52,11 +52,11 @@ export function useWhatsAppEmbeddedSignup() {
     const [error, setError] = useState<string | null>(null);
 
     /**
-     * Load Facebook SDK
+     * Load and initialize Facebook SDK
      */
-    const loadFacebookSDK = (): Promise<void> => {
-        return new Promise((resolve) => {
-            // Check if SDK is already loaded
+    const loadFacebookSDK = (appId: string): Promise<void> => {
+        return new Promise((resolve, reject) => {
+            // Check if SDK is already loaded and initialized
             if (window.FB) {
                 resolve();
                 return;
@@ -64,17 +64,42 @@ export function useWhatsAppEmbeddedSignup() {
 
             // Define callback for SDK initialization
             window.fbAsyncInit = () => {
-                resolve();
+                if (window.FB) {
+                    window.FB.init({
+                        appId: appId,
+                        autoLogAppEvents: true,
+                        xfbml: true,
+                        version: 'v18.0',
+                    });
+                    resolve();
+                } else {
+                    reject(new Error('Facebook SDK failed to initialize'));
+                }
             };
 
-            // Load SDK script
+            // Load SDK script if not already present
             if (!document.getElementById('facebook-jssdk')) {
                 const script = document.createElement('script');
                 script.id = 'facebook-jssdk';
                 script.src = 'https://connect.facebook.net/en_US/sdk.js';
                 script.async = true;
                 script.defer = true;
+                script.onerror = () =>
+                    reject(new Error('Failed to load Facebook SDK script'));
                 document.body.appendChild(script);
+            } else {
+                // Script exists but SDK not initialized yet
+                setTimeout(() => {
+                    if (window.FB) {
+                        resolve();
+                    } else {
+                        reject(
+                            new Error(
+                                'Facebook SDK script loaded but not initialized',
+                            ),
+                        );
+                    }
+                }, 1000);
             }
         });
     };
@@ -99,20 +124,13 @@ export function useWhatsAppEmbeddedSignup() {
                 throw new Error('Invalid response from server');
             }
 
-            // Load Facebook SDK
-            await loadFacebookSDK();
+            // Load and initialize Facebook SDK
+            await loadFacebookSDK(data.config.app_id);
 
-            // Initialize Facebook SDK
+            // Verify SDK is ready
             if (!window.FB) {
                 throw new Error('Facebook SDK failed to load');
             }
-
-            window.FB.init({
-                appId: data.config.app_id,
-                autoLogAppEvents: true,
-                xfbml: true,
-                version: 'v18.0',
-            });
 
             // Launch Embedded Signup
             launchSignupModal(data.config);

@@ -255,7 +255,27 @@ Frontend                  Backend                   Meta API
 - Verify cookies are not blocked in browser settings
 - Make sure you're logged in (auth required for admin endpoints)
 
-#### 2. "Invalid state parameter" error
+#### 2. "Error retrieving login status, fetch cancelled" error
+**Cause**: Facebook SDK initialization issues or Meta App configuration problems
+
+**Solutions**:
+- **Check Meta App ID**: Verify `META_APP_ID` in `.env` is correct
+- **App Status**: Ensure your Meta App is in "Live" mode (not Development)
+- **Domain Whitelist**: In Meta App Settings > Basic, add your domain to "App Domains"
+- **Valid OAuth Redirect URIs**: In Meta App Settings > Advanced, add your callback URL:
+  - `https://yourdomain.com/whatsapp/signup/callback`
+  - For local development with ngrok: `https://your-ngrok-url.ngrok.io/whatsapp/signup/callback`
+- **Site URL**: Set in Meta App Settings > Basic (should match your domain)
+- **Browser Console**: Check for CORS or mixed content errors
+- **Clear Cache**: Hard refresh the page (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows)
+- **Try Different Browser**: Test in incognito/private mode to rule out extensions
+
+**Development Tips**:
+- Use ngrok or similar for local testing: `ngrok http 8000`
+- Update all URLs in Meta dashboard to use ngrok URL
+- Facebook SDK requires HTTPS (except for localhost)
+
+#### 3. "Invalid state parameter" error
 **Cause**: Session state mismatch (CSRF protection triggered)
 
 **Solutions**:
