@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Business;
+use App\Models\ConversationPause;
+use App\Services\AutoReplyService;
 use App\Services\OnboardingService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
@@ -11,7 +14,8 @@ class WhatsAppWebhookController extends Controller
 {
     public function __construct(
         protected WhatsAppService $whatsAppService,
-        protected OnboardingService $onboardingService
+        protected OnboardingService $onboardingService,
+        protected AutoReplyService $autoReplyService
     ) {}
 
     /**
@@ -121,16 +125,44 @@ class WhatsAppWebhookController extends Controller
                 return;
             }
 
-            // Default: Send auto-reply "Hello"
-            $outboundMessage = $this->whatsAppService->sendMessage($from, 'Hello');
+            // Check if conversation is paused (human takeover)
+            if (ConversationPause::isPaused($from)) {
+                Log::info('Conversation paused, skipping auto-reply', ['from' => $from]);
 
-            if ($outboundMessage) {
-                Log::info('Auto-reply sent successfully', [
-                    'to' => $from,
-                    'message_id' => $outboundMessage->message_id,
-                ]);
-            } else {
-                Log::error('Failed to send auto-reply', ['to' => $from]);
+                return;
+            }
+
+            // Find business profile
+            $businessPhoneId = config('services.whatsapp.phone_number_id');
+
+            if (! $businessPhoneId) {
+                Log::warning('WhatsApp phone number ID not configured');
+
+                return;
+            }
+
+            $business = Business::where('phone_number', $businessPhoneId)->first();
+
+            if (! $business || ! $business->is_onboarded) {
+                Log::warning('Business not onboarded, skipping auto-reply');
+
+                return;
+            }
+
+            // Generate and send auto-reply
+            $replyMessage = $this->autoReplyService->generateReply($messageText, $business);
+
+            if ($replyMessage) {
+                $outboundMessage = $this->whatsAppService->sendMessage($from, $replyMessage);
+
+                if ($outboundMessage) {
+                    Log::info('Auto-reply sent successfully', [
+                        'to' => $from,
+                        'message_id' => $outboundMessage->message_id,
+                    ]);
+                } else {
+                    Log::error('Failed to send auto-reply', ['to' => $from]);
+                }
             }
         } catch (\Exception $e) {
             Log::error('Error handling message', [

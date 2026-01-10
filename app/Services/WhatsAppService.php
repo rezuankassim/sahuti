@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ConversationPause;
 use App\Models\WhatsAppMessage;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -24,7 +25,7 @@ class WhatsAppService
     }
 
     /**
-     * Send a text message via WhatsApp Cloud API
+     * Send a text message via WhatsApp Cloud API (automated)
      */
     public function sendMessage(string $to, string $message): ?WhatsAppMessage
     {
@@ -69,6 +70,26 @@ class WhatsAppService
 
             return null;
         }
+    }
+
+    /**
+     * Send a manual reply from business owner (triggers 30-min pause)
+     */
+    public function sendManualReply(string $to, string $message): ?WhatsAppMessage
+    {
+        $outboundMessage = $this->sendMessage($to, $message);
+
+        if ($outboundMessage) {
+            // Pause conversation for 30 minutes
+            ConversationPause::pauseConversation($to);
+
+            Log::info('Manual reply sent, conversation paused for 30 minutes', [
+                'to' => $to,
+                'paused_until' => now()->addMinutes(30),
+            ]);
+        }
+
+        return $outboundMessage;
     }
 
     /**
