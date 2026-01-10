@@ -245,7 +245,17 @@ Frontend                  Backend                   Meta API
 
 ### Common Issues
 
-#### 1. "Invalid state parameter" error
+#### 1. 419 CSRF Token Mismatch Error
+**Cause**: CSRF token not being sent with the request
+
+**Solutions**:
+- Ensure you're using the configured axios instance from `@/lib/axios`
+- Clear browser cookies and try again
+- Check that `SESSION_DRIVER` is set to `database` (not `file`)
+- Verify cookies are not blocked in browser settings
+- Make sure you're logged in (auth required for admin endpoints)
+
+#### 2. "Invalid state parameter" error
 **Cause**: Session state mismatch (CSRF protection triggered)
 
 **Solutions**:

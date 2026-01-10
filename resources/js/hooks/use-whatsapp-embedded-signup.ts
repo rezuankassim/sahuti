@@ -1,3 +1,4 @@
+import axios from '@/lib/axios';
 import admin from '@/routes/admin';
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
@@ -86,28 +87,13 @@ export function useWhatsAppEmbeddedSignup() {
         setError(null);
 
         try {
-            // Call backend to get signup configuration
-            const response = await fetch(
-                admin.businesses.whatsapp.initiate(businessId).url,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN':
-                            document
-                                .querySelector('meta[name="csrf-token"]')
-                                ?.getAttribute('content') || '',
-                    },
-                },
-            );
+            // Call backend using axios (CSRF token handled automatically)
+            const response = await axios.post<{
+                success: boolean;
+                config: SignupConfig;
+            }>(admin.businesses.whatsapp.initiate(businessId).url);
 
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.message || 'Failed to initiate signup');
-            }
-
-            const data: { success: boolean; config: SignupConfig } =
-                await response.json();
+            const data = response.data;
 
             if (!data.success || !data.config) {
                 throw new Error('Invalid response from server');
@@ -130,11 +116,11 @@ export function useWhatsAppEmbeddedSignup() {
 
             // Launch Embedded Signup
             launchSignupModal(data.config);
-        } catch (err) {
+        } catch (err: any) {
             const message =
-                err instanceof Error
-                    ? err.message
-                    : 'An unknown error occurred';
+                err.response?.data?.message ||
+                err.message ||
+                'An unknown error occurred';
             setError(message);
             setIsLoading(false);
         }
