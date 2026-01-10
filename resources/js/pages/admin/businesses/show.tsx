@@ -1,4 +1,4 @@
-import { Alert } from '@/components/ui/alert';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -123,12 +123,12 @@ export default function BusinessShow({ business }: Props) {
                 {/* Flash Messages */}
                 {props.flash?.success && (
                     <Alert className="border-green-500 bg-green-50 text-green-900 dark:bg-green-950 dark:text-green-100">
-                        {props.flash.success}
+                        <AlertTitle>{props.flash.success}</AlertTitle>
                     </Alert>
                 )}
                 {(props.flash?.error || error) && (
                     <Alert className="border-red-500 bg-red-50 text-red-900 dark:bg-red-950 dark:text-red-100">
-                        {props.flash?.error || error}
+                        <AlertTitle>{props.flash?.error || error}</AlertTitle>
                     </Alert>
                 )}
 
