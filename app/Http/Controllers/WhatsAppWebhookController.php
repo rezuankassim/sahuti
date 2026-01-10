@@ -8,6 +8,7 @@ use App\Models\ConversationPause;
 use App\Services\AutoReplyService;
 use App\Services\OnboardingService;
 use App\Services\RateLimiterService;
+use App\Services\TenantRouterService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -18,7 +19,8 @@ class WhatsAppWebhookController extends Controller
         protected WhatsAppService $whatsAppService,
         protected OnboardingService $onboardingService,
         protected AutoReplyService $autoReplyService,
-        protected RateLimiterService $rateLimiter
+        protected RateLimiterService $rateLimiter,
+        protected TenantRouterService $tenantRouter
     ) {}
 
     /**
@@ -68,8 +70,11 @@ class WhatsAppWebhookController extends Controller
                     foreach ($entry['changes'] as $change) {
                         // Handle messages
                         if ($change['field'] === 'messages' && isset($change['value']['messages'])) {
+                            // Extract phone_number_id from metadata for tenant routing
+                            $phoneNumberId = $change['value']['metadata']['phone_number_id'] ?? null;
+
                             foreach ($change['value']['messages'] as $message) {
-                                $this->handleMessage($message);
+                                $this->handleMessage($message, $phoneNumberId);
                             }
                         }
 
@@ -90,7 +95,7 @@ class WhatsAppWebhookController extends Controller
     /**
      * Process incoming message and handle onboarding or send auto-reply
      */
-    protected function handleMessage(array $messageData): void
+    protected function handleMessage(array $messageData, ?string $phoneNumberId = null): void
     {
         try {
             // Log incoming message
@@ -145,19 +150,33 @@ class WhatsAppWebhookController extends Controller
                 return;
             }
 
-            // Find business profile
-            $businessPhoneId = config('services.whatsapp.phone_number_id');
+            // Route to correct business tenant
+            if (! $phoneNumberId) {
+                // Fallback: try to extract from message metadata
+                $phoneNumberId = $messageData['metadata']['phone_number_id'] ?? config('services.whatsapp.phone_number_id');
+            }
 
-            if (! $businessPhoneId) {
-                Log::warning('WhatsApp phone number ID not configured');
+            if (! $phoneNumberId) {
+                Log::warning('No phone_number_id available for routing');
 
                 return;
             }
 
-            $business = Business::where('phone_number', $businessPhoneId)->first();
+            // Use tenant router with fallback for single-tenant setups
+            $business = $this->tenantRouter->getBusinessByPhoneNumberIdWithFallback($phoneNumberId);
 
-            if (! $business || ! $business->is_onboarded) {
-                Log::warning('Business not onboarded, skipping auto-reply');
+            if (! $business) {
+                Log::warning('No business found for phone_number_id', [
+                    'phone_number_id' => $phoneNumberId,
+                ]);
+
+                return;
+            }
+
+            if (! $business->is_onboarded) {
+                Log::warning('Business not onboarded, skipping auto-reply', [
+                    'business_id' => $business->id,
+                ]);
 
                 return;
             }
@@ -171,7 +190,7 @@ class WhatsAppWebhookController extends Controller
             $replyType = $this->determineReplyType($messageText, $replyMessage);
 
             if ($replyMessage) {
-                $outboundMessage = $this->whatsAppService->sendMessage($from, $replyMessage);
+                $outboundMessage = $this->whatsAppService->sendMessage($from, $replyMessage, $business);
 
                 if ($outboundMessage) {
                     // Set rate limit cooldown

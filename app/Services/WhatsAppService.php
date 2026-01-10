@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Business;
 use App\Models\ConversationPause;
 use App\Models\WhatsAppMessage;
 use Illuminate\Support\Facades\Http;
@@ -27,11 +28,14 @@ class WhatsAppService
     /**
      * Send a text message via WhatsApp Cloud API (automated)
      */
-    public function sendMessage(string $to, string $message): ?WhatsAppMessage
+    public function sendMessage(string $to, string $message, ?Business $business = null): ?WhatsAppMessage
     {
         try {
-            $response = Http::withToken($this->accessToken)
-                ->post("{$this->apiUrl}/{$this->phoneNumberId}/messages", [
+            $accessToken = $business?->getWhatsAppAccessToken() ?? $this->accessToken;
+            $phoneNumberId = $business?->getWhatsAppPhoneNumberId() ?? $this->phoneNumberId;
+
+            $response = Http::withToken($accessToken)
+                ->post("{$this->apiUrl}/{$phoneNumberId}/messages", [
                     'messaging_product' => 'whatsapp',
                     'recipient_type' => 'individual',
                     'to' => $to,
@@ -48,7 +52,7 @@ class WhatsAppService
                 return WhatsAppMessage::create([
                     'message_id' => $data['messages'][0]['id'],
                     'direction' => 'outbound',
-                    'from' => $this->phoneNumberId,
+                    'from' => $phoneNumberId,
                     'to' => $to,
                     'message_type' => 'text',
                     'content' => ['body' => $message],
@@ -75,9 +79,9 @@ class WhatsAppService
     /**
      * Send a manual reply from business owner (triggers 30-min pause)
      */
-    public function sendManualReply(string $to, string $message): ?WhatsAppMessage
+    public function sendManualReply(string $to, string $message, ?Business $business = null): ?WhatsAppMessage
     {
-        $outboundMessage = $this->sendMessage($to, $message);
+        $outboundMessage = $this->sendMessage($to, $message, $business);
 
         if ($outboundMessage) {
             // Pause conversation for 30 minutes
@@ -147,7 +151,7 @@ class WhatsAppService
                 'message_id' => $messageId,
                 'direction' => 'inbound',
                 'from' => $from,
-                'to' => $this->phoneNumberId,
+                'to' => $messageData['metadata']['phone_number_id'] ?? $this->phoneNumberId,
                 'message_type' => $messageType,
                 'content' => $content,
                 'status' => 'received',
