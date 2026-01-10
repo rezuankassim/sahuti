@@ -158,9 +158,11 @@ export default function BusinessesIndex({ businesses }: Props) {
                                                 </td>
                                                 <td className="py-3">
                                                     <Link
-                                                        href={admin.businesses
-                                                            .show(business.id)
-                                                            .url()}
+                                                        href={
+                                                            admin.businesses.show(
+                                                                business.id,
+                                                            ).url
+                                                        }
                                                     >
                                                         <Button
                                                             variant="outline"
