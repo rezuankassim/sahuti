@@ -14,7 +14,7 @@ class WhatsAppService
 
     protected string $appSecret;
 
-    protected string $apiUrl = 'https://graph.facebook.com/v22.0';
+    protected string $apiUrl = 'https://graph.facebook.com/v24.0';
 
     public function __construct()
     {
