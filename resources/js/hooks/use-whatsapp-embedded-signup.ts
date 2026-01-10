@@ -88,7 +88,7 @@ export function useWhatsAppEmbeddedSignup() {
         try {
             // Call backend to get signup configuration
             const response = await fetch(
-                admin.businesses.whatsapp.initiate(businessId).url(),
+                admin.businesses.whatsapp.initiate(businessId).url,
                 {
                     method: 'POST',
                     headers: {
