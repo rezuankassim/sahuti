@@ -32,8 +32,8 @@ class LLMService
                     ['role' => 'system', 'content' => $systemPrompt],
                     ['role' => 'user', 'content' => $userPrompt],
                 ],
-                'max_tokens' => config('services.llm.max_tokens', 500),
-                'temperature' => config('services.llm.temperature', 0.3),
+                'max_tokens' => (int) config('services.llm.max_tokens', 500),
+                'temperature' => (float) config('services.llm.temperature', 0.3),
             ]);
 
             $replyText = $response->choices[0]->message->content ?? '';
@@ -44,6 +44,7 @@ class LLMService
             Log::info('LLM reply generated', [
                 'business' => $business->name,
                 'intent' => $intent,
+                'reply' => $replyText,
                 'tokens' => $response->usage->totalTokens ?? 0,
                 'escalation' => $escalationNeeded,
             ]);
@@ -85,12 +86,12 @@ class LLMService
         $prompt = "You are a customer support assistant for {$business->name}.\n\n";
         $prompt .= "STRICT RULES:\n";
         $prompt .= "1. ONLY answer using the business profile data provided below\n";
-        $prompt .= "2. If information is not in the profile, politely say you don't have that information\n";
-        $prompt .= "3. NEVER make up prices, services, areas, or hours\n";
-        $prompt .= "4. NEVER answer questions outside the business scope (politics, news, general advice, etc.)\n";
-        $prompt .= "5. Keep replies concise and helpful (2-3 sentences max)\n";
-        $prompt .= "6. Use a friendly, professional tone\n";
-        $prompt .= "7. If you cannot help, offer to connect them with the business owner\n\n";
+        $prompt .= "2. Answer questions about services, prices, areas, hours, and booking confidently using the profile\n";
+        $prompt .= "3. If specific information is missing from the profile, politely say 'I need to check with the owner about that'\n";
+        $prompt .= "4. NEVER make up prices, services, areas, or hours\n";
+        $prompt .= "5. NEVER answer questions outside the business scope (politics, news, general advice, etc.)\n";
+        $prompt .= "6. Keep replies concise and helpful (2-3 sentences max)\n";
+        $prompt .= "7. Use a friendly, professional tone\n\n";
 
         $prompt .= "BUSINESS PROFILE:\n";
         $prompt .= "```json\n{$profileJson}\n```\n\n";
@@ -118,15 +119,15 @@ class LLMService
     protected function detectEscalation(string $reply): bool
     {
         $escalationPhrases = [
-            "don't have that information",
-            'not available in',
-            'connect you with',
-            'reach out to',
-            'contact the owner',
-            'i cannot',
-            "i can't",
-            'unable to help',
-            'outside my scope',
+            'need to check with the owner',
+            'check with the owner',
+            "don't have that specific information",
+            'contact the owner directly',
+            'reach out to the owner',
+            'i cannot help with that',
+            "i can't help with that",
+            'unable to help with that',
+            'outside my knowledge',
         ];
 
         $lowerReply = strtolower($reply);

@@ -66,13 +66,13 @@ test('non-keyword message uses LLM when enabled', function () {
 });
 
 test('LLM refuses to answer out-of-scope question', function () {
-    // Mock LLM refusing to answer
+    // Mock LLM refusing to answer with new escalation phrase
     OpenAI::fake([
         CreateResponse::fake([
             'choices' => [
                 [
                     'message' => [
-                        'content' => "I don't have that information in my business profile. Let me connect you with the owner.",
+                        'content' => "I need to check with the owner about that as it's outside my business information.",
                     ],
                 ],
             ],
@@ -141,7 +141,7 @@ test('escalation message shown when LLM cannot help', function () {
             'choices' => [
                 [
                     'message' => [
-                        'content' => "I don't have that information. Let me connect you with the owner.",
+                        'content' => 'I need to check with the owner about that specific detail.',
                     ],
                 ],
             ],

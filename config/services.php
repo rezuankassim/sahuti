@@ -43,11 +43,11 @@ return [
     ],
 
     'llm' => [
-        'enabled' => env('LLM_ENABLED', true),
+        'enabled' => (bool) env('LLM_ENABLED', true),
         'provider' => env('LLM_PROVIDER', 'openai'),
         'model' => env('LLM_MODEL', 'gpt-4o-mini'),
-        'max_tokens' => env('LLM_MAX_TOKENS', 500),
-        'temperature' => env('LLM_TEMPERATURE', 0.3),
+        'max_tokens' => (int) env('LLM_MAX_TOKENS', 500),
+        'temperature' => (float) env('LLM_TEMPERATURE', 0.3),
     ],
 
 ];

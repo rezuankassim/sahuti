@@ -208,14 +208,18 @@ ALTER TABLE businesses ADD COLUMN llm_enabled BOOLEAN DEFAULT TRUE;
 
 ### Escalation Detection
 
-The system detects escalation from LLM responses containing phrases like:
-- "don't have that information"
-- "not available in"
-- "connect you with"
-- "contact the owner"
-- "i cannot" / "i can't"
-- "unable to help"
-- "outside my scope"
+The system detects escalation from LLM responses containing specific phrases:
+- "need to check with the owner"
+- "check with the owner"
+- "don't have that specific information"
+- "contact the owner directly"
+- "reach out to the owner"
+- "i cannot help with that"
+- "i can't help with that"
+- "unable to help with that"
+- "outside my knowledge"
+
+**Note:** Phrases are more specific now to avoid false positives (e.g., "not available" in area descriptions)
 
 ## Safety & Security
 
