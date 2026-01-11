@@ -71,6 +71,10 @@ class WhatsAppWebhookController extends Controller
      */
     public function handle(Request $request)
     {
+        Log::info('WhatsApp webhook POST received', [
+            'headers' => $request->headers->all(),
+            'body' => $request->getContent(),
+        ]);
         $data = $request->all();
 
         // Try to determine which business this webhook is for
@@ -177,11 +181,11 @@ class WhatsAppWebhookController extends Controller
                 return;
             }
 
-            // Check rate limit (max 1 reply / 90 seconds)
+            // Check burst detection (prevent replying to rapid consecutive messages)
             if ($this->rateLimiter->isRateLimited($from)) {
-                Log::info('Customer rate limited, skipping auto-reply', [
+                Log::info('Customer in burst mode, skipping auto-reply (will reply after burst)', [
                     'from' => $from,
-                    'cooldown_remaining' => $this->rateLimiter->getRemainingCooldown($from),
+                    'burst_window_remaining' => $this->rateLimiter->getRemainingCooldown($from),
                 ]);
 
                 return;

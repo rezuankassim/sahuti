@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Cache;
 class RateLimiterService
 {
     /**
-     * Check if customer is rate limited (90 second cooldown)
+     * Check if customer is in burst mode (sending messages too quickly)
+     * This prevents replying to every message in a rapid burst, but allows normal conversation
      */
     public function isRateLimited(string $customerPhone): bool
     {
@@ -26,25 +27,27 @@ class RateLimiterService
             return false;
         }
 
-        $cooldownSeconds = config('auto_reply.cooldown_seconds', 90);
+        // Short burst window (5 seconds) to detect rapid messages
+        $burstWindowSeconds = config('auto_reply.burst_window_seconds', 5);
         $secondsSinceLastReply = now()->diffInSeconds($lastReplyTime);
 
-        return $secondsSinceLastReply < $cooldownSeconds;
+        return $secondsSinceLastReply < $burstWindowSeconds;
     }
 
     /**
-     * Set rate limit cooldown for customer
+     * Set burst detection cooldown for customer
+     * This is a short window to detect if customer is sending multiple messages quickly
      */
     public function setCooldown(string $customerPhone): void
     {
         $cacheKey = "auto_reply_cooldown:{$customerPhone}";
-        $cooldownSeconds = config('auto_reply.cooldown_seconds', 90);
+        $burstWindowSeconds = config('auto_reply.burst_window_seconds', 5);
 
-        Cache::put($cacheKey, true, $cooldownSeconds);
+        Cache::put($cacheKey, true, $burstWindowSeconds);
     }
 
     /**
-     * Get remaining cooldown time in seconds
+     * Get remaining burst window time in seconds
      */
     public function getRemainingCooldown(string $customerPhone): int
     {
@@ -54,9 +57,9 @@ class RateLimiterService
             return 0;
         }
 
-        $cooldownSeconds = config('auto_reply.cooldown_seconds', 90);
+        $burstWindowSeconds = config('auto_reply.burst_window_seconds', 5);
         $secondsSinceLastReply = now()->diffInSeconds($lastReplyTime);
 
-        return max(0, $cooldownSeconds - $secondsSinceLastReply);
+        return max(0, $burstWindowSeconds - $secondsSinceLastReply);
     }
 }
