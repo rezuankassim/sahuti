@@ -3,7 +3,6 @@
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
-use App\Http\Controllers\Settings\WhatsAppController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -26,9 +25,4 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
-
-    Route::get('settings/whatsapp', [WhatsAppController::class, 'edit'])->name('whatsapp.edit');
-    Route::patch('settings/whatsapp', [WhatsAppController::class, 'update'])->name('whatsapp.update');
-    Route::post('settings/whatsapp/reset-onboarding', [WhatsAppController::class, 'resetOnboarding'])
-        ->name('whatsapp.reset-onboarding');
 });

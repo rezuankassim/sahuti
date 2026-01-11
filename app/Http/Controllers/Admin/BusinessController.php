@@ -4,6 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Business;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -59,7 +63,61 @@ class BusinessController extends Controller
                 'created_at' => $business->created_at->format('Y-m-d H:i:s'),
                 'is_connected' => $business->isWhatsAppConnected(),
                 'can_send_messages' => $business->canSendMessages(),
+                'onboarding_phone' => $business->onboarding_phone,
+                'meta_app_id' => $business->meta_app_id,
+                'webhook_verify_token' => $business->webhook_verify_token,
             ],
         ]);
+    }
+
+    /**
+     * Update WhatsApp configuration for a business
+     */
+    public function updateWhatsApp(Request $request, Business $business): RedirectResponse
+    {
+        $validated = $request->validate([
+            'meta_app_id' => ['required', 'string', 'max:255'],
+            'meta_app_secret' => ['required', 'string', 'max:1000'],
+            'phone_number_id' => ['required', 'string', 'max:255', Rule::unique('businesses', 'phone_number_id')->ignore($business->id)],
+            'wa_access_token' => ['required', 'string', 'max:1000'],
+            'webhook_verify_token' => ['required', 'string', 'max:255'],
+            'waba_id' => ['nullable', 'string', 'max:255'],
+            'display_phone_number' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $business->update([
+            'meta_app_id' => $validated['meta_app_id'],
+            'meta_app_secret' => $validated['meta_app_secret'],
+            'phone_number_id' => $validated['phone_number_id'],
+            'wa_access_token' => $validated['wa_access_token'],
+            'webhook_verify_token' => $validated['webhook_verify_token'],
+            'waba_id' => $validated['waba_id'] ?? null,
+            'display_phone_number' => $validated['display_phone_number'] ?? null,
+            'wa_status' => 'connected',
+            'connected_at' => $business->connected_at ?? now(),
+        ]);
+
+        Log::info('WhatsApp configuration updated for business', [
+            'business_id' => $business->id,
+        ]);
+
+        return back()->with('success', 'WhatsApp configuration updated successfully');
+    }
+
+    /**
+     * Reset onboarding lock for a business
+     */
+    public function resetOnboarding(Business $business): RedirectResponse
+    {
+        $business->update([
+            'onboarding_phone' => null,
+            'is_onboarded' => false,
+        ]);
+
+        Log::info('Onboarding lock reset for business', [
+            'business_id' => $business->id,
+        ]);
+
+        return back()->with('success', 'Onboarding lock reset successfully');
     }
 }

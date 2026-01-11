@@ -1,4 +1,7 @@
-import { Alert, AlertTitle } from '@/components/ui/alert';
+import BusinessController from '@/actions/App/Http/Controllers/Admin/BusinessController';
+import HeadingSmall from '@/components/heading-small';
+import InputError from '@/components/input-error';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,12 +11,15 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { useWhatsAppEmbeddedSignup } from '@/hooks/use-whatsapp-embedded-signup';
 import AppLayout from '@/layouts/app-layout';
 import admin from '@/routes/admin';
 import { type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { Transition } from '@headlessui/react';
+import { Form, Head, router, usePage } from '@inertiajs/react';
+import { AlertCircle, CheckCircle2, Info } from 'lucide-react';
 
 interface Service {
     name: string;
@@ -42,6 +48,9 @@ interface Business {
     created_at: string;
     is_connected: boolean;
     can_send_messages: boolean;
+    onboarding_phone: string | null;
+    meta_app_id: string | null;
+    webhook_verify_token: string | null;
 }
 
 interface Props {
@@ -52,8 +61,6 @@ export default function BusinessShow({ business }: Props) {
     const { props } = usePage<{
         flash: { success?: string; error?: string };
     }>();
-    const { initiateSignup, disconnect, isLoading, error } =
-        useWhatsAppEmbeddedSignup();
 
     const breadcrumbs: BreadcrumbItem[] = [
         {
@@ -116,6 +123,19 @@ export default function BusinessShow({ business }: Props) {
         ));
     };
 
+    const handleResetOnboarding = () => {
+        if (
+            confirm(
+                'Are you sure you want to reset the onboarding lock? This will allow a new phone number to complete the onboarding process.'
+            )
+        ) {
+            router.post(
+                `/admin/businesses/${business.id}/whatsapp/reset-onboarding`,
+                {}
+            );
+        }
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={business.name} />
@@ -126,9 +146,9 @@ export default function BusinessShow({ business }: Props) {
                         <AlertTitle>{props.flash.success}</AlertTitle>
                     </Alert>
                 )}
-                {(props.flash?.error || error) && (
+                {props.flash?.error && (
                     <Alert className="border-red-500 bg-red-50 text-red-900 dark:bg-red-950 dark:text-red-100">
-                        <AlertTitle>{props.flash?.error || error}</AlertTitle>
+                        <AlertTitle>{props.flash.error}</AlertTitle>
                     </Alert>
                 )}
 
@@ -231,138 +251,242 @@ export default function BusinessShow({ business }: Props) {
                                 <div>
                                     <CardTitle>WhatsApp Connection</CardTitle>
                                     <CardDescription>
-                                        Connect this business to WhatsApp
-                                        Business API
+                                        Configure WhatsApp Business API
+                                        credentials
                                     </CardDescription>
                                 </div>
                                 {getStatusBadge()}
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {business.is_connected ? (
-                                <>
-                                    <div>
-                                        <h4 className="mb-2 text-sm font-medium">
-                                            WABA ID
-                                        </h4>
-                                        <p className="font-mono text-sm text-muted-foreground">
-                                            {business.waba_id}
-                                        </p>
-                                    </div>
+                            {business.is_connected && (
+                                <Alert>
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    <AlertTitle>Connected</AlertTitle>
+                                    <AlertDescription>
+                                        WhatsApp Business API is connected
+                                        {business.display_phone_number &&
+                                            ` (${business.display_phone_number})`}
+                                        {business.connected_at &&
+                                            `. Connected since ${new Date(business.connected_at).toLocaleDateString()}`}
+                                    </AlertDescription>
+                                </Alert>
+                            )}
 
-                                    <div>
-                                        <h4 className="mb-2 text-sm font-medium">
-                                            Phone Number ID
-                                        </h4>
-                                        <p className="font-mono text-sm text-muted-foreground">
-                                            {business.phone_number_id}
-                                        </p>
-                                    </div>
+                            <Alert>
+                                <Info className="h-4 w-4" />
+                                <AlertTitle>Setup instructions</AlertTitle>
+                                <AlertDescription className="space-y-2 text-xs">
+                                    <p>
+                                        1. Create a Meta app at
+                                        developers.facebook.com
+                                    </p>
+                                    <p>
+                                        2. Add WhatsApp product and get
+                                        credentials
+                                    </p>
+                                    <p>
+                                        3. Set webhook URL:
+                                        <code className="ml-1 rounded bg-muted px-1 py-0.5">
+                                            {window.location.origin}
+                                            /webhook/whatsapp
+                                        </code>
+                                    </p>
+                                    <p>
+                                        4. Message business number with
+                                        <strong> ONBOARDING</strong> to start
+                                    </p>
+                                </AlertDescription>
+                            </Alert>
 
-                                    {business.display_phone_number && (
-                                        <div>
-                                            <h4 className="mb-2 text-sm font-medium">
-                                                Display Phone Number
-                                            </h4>
-                                            <p className="text-sm text-muted-foreground">
-                                                {business.display_phone_number}
-                                            </p>
+                            <Form
+                                {...BusinessController.updateWhatsApp.form(
+                                    business.id
+                                )}
+                                options={{
+                                    preserveScroll: true,
+                                }}
+                                className="space-y-4"
+                            >
+                                {({ processing, recentlySuccessful, errors }) => (
+                                    <>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="meta_app_id">
+                                                Meta App ID *
+                                            </Label>
+                                            <Input
+                                                id="meta_app_id"
+                                                name="meta_app_id"
+                                                defaultValue={
+                                                    business.meta_app_id || ''
+                                                }
+                                                required
+                                                placeholder="123456789012345"
+                                            />
+                                            <InputError
+                                                message={errors.meta_app_id}
+                                            />
                                         </div>
-                                    )}
 
-                                    <div>
-                                        <h4 className="mb-2 text-sm font-medium">
-                                            Connected At
-                                        </h4>
-                                        <p className="text-sm text-muted-foreground">
-                                            {business.connected_at}
-                                        </p>
-                                    </div>
-
-                                    <Separator />
-
-                                    <div className="flex items-center justify-between rounded-lg border p-3">
-                                        <div>
-                                            <p className="text-sm font-medium">
-                                                Can Send Messages
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {business.can_send_messages
-                                                    ? 'This business can send and receive messages'
-                                                    : 'Complete onboarding to enable messaging'}
-                                            </p>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="meta_app_secret">
+                                                Meta App Secret *
+                                            </Label>
+                                            <Input
+                                                id="meta_app_secret"
+                                                name="meta_app_secret"
+                                                type="password"
+                                                defaultValue=""
+                                                required
+                                                placeholder="Enter app secret"
+                                            />
+                                            <InputError
+                                                message={errors.meta_app_secret}
+                                            />
                                         </div>
-                                        <Badge
-                                            variant={
-                                                business.can_send_messages
-                                                    ? 'default'
-                                                    : 'outline'
-                                            }
-                                        >
-                                            {business.can_send_messages
-                                                ? 'Active'
-                                                : 'Inactive'}
-                                        </Badge>
-                                    </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="phone_number_id">
+                                                Phone Number ID *
+                                            </Label>
+                                            <Input
+                                                id="phone_number_id"
+                                                name="phone_number_id"
+                                                defaultValue={
+                                                    business.phone_number_id ||
+                                                    ''
+                                                }
+                                                required
+                                                placeholder="123456789012345"
+                                            />
+                                            <InputError
+                                                message={errors.phone_number_id}
+                                            />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="wa_access_token">
+                                                Access Token *
+                                            </Label>
+                                            <Input
+                                                id="wa_access_token"
+                                                name="wa_access_token"
+                                                type="password"
+                                                defaultValue=""
+                                                required
+                                                placeholder="Enter access token"
+                                            />
+                                            <InputError
+                                                message={errors.wa_access_token}
+                                            />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="webhook_verify_token">
+                                                Webhook Verify Token *
+                                            </Label>
+                                            <Input
+                                                id="webhook_verify_token"
+                                                name="webhook_verify_token"
+                                                defaultValue={
+                                                    business.webhook_verify_token ||
+                                                    ''
+                                                }
+                                                required
+                                                placeholder="my_secure_token"
+                                            />
+                                            <InputError
+                                                message={
+                                                    errors.webhook_verify_token
+                                                }
+                                            />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="waba_id">
+                                                WABA ID (Optional)
+                                            </Label>
+                                            <Input
+                                                id="waba_id"
+                                                name="waba_id"
+                                                defaultValue={
+                                                    business.waba_id || ''
+                                                }
+                                                placeholder="123456789012345"
+                                            />
+                                            <InputError
+                                                message={errors.waba_id}
+                                            />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="display_phone_number">
+                                                Display Phone (Optional)
+                                            </Label>
+                                            <Input
+                                                id="display_phone_number"
+                                                name="display_phone_number"
+                                                defaultValue={
+                                                    business.display_phone_number ||
+                                                    ''
+                                                }
+                                                placeholder="+1234567890"
+                                            />
+                                            <InputError
+                                                message={
+                                                    errors.display_phone_number
+                                                }
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center gap-4">
+                                            <Button disabled={processing}>
+                                                Save configuration
+                                            </Button>
+
+                                            <Transition
+                                                show={recentlySuccessful}
+                                                enter="transition ease-in-out"
+                                                enterFrom="opacity-0"
+                                                leave="transition ease-in-out"
+                                                leaveTo="opacity-0"
+                                            >
+                                                <p className="text-sm text-neutral-600">
+                                                    Saved
+                                                </p>
+                                            </Transition>
+                                        </div>
+                                    </>
+                                )}
+                            </Form>
+
+                            {business.onboarding_phone && (
+                                <div className="space-y-4 border-t pt-4">
+                                    <HeadingSmall
+                                        title="Onboarding lock"
+                                        description="Onboarding is locked to a specific phone number"
+                                    />
+
+                                    <Alert variant="destructive">
+                                        <AlertCircle className="h-4 w-4" />
+                                        <AlertTitle>
+                                            Locked to {business.onboarding_phone}
+                                        </AlertTitle>
+                                        <AlertDescription>
+                                            Only this number can complete
+                                            onboarding. Reset to allow a
+                                            different number.
+                                        </AlertDescription>
+                                    </Alert>
 
                                     <Button
                                         variant="destructive"
-                                        className="w-full"
-                                        onClick={() => disconnect(business.id)}
-                                        disabled={isLoading}
+                                        size="sm"
+                                        onClick={handleResetOnboarding}
                                     >
-                                        {isLoading
-                                            ? 'Processing...'
-                                            : 'Disconnect WhatsApp'}
+                                        Reset onboarding lock
                                     </Button>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="rounded-lg border border-dashed p-6 text-center">
-                                        <p className="mb-4 text-sm text-muted-foreground">
-                                            This business is not connected to
-                                            WhatsApp Business API. Connect now
-                                            to enable automated messaging.
-                                        </p>
-                                        <Button
-                                            onClick={() =>
-                                                initiateSignup(business.id)
-                                            }
-                                            disabled={isLoading}
-                                            className="w-full"
-                                        >
-                                            {isLoading
-                                                ? 'Connecting...'
-                                                : 'Connect WhatsApp'}
-                                        </Button>
-                                    </div>
-
-                                    <div className="rounded-lg bg-muted p-4">
-                                        <h4 className="mb-2 text-sm font-medium">
-                                            What happens next?
-                                        </h4>
-                                        <ol className="list-inside list-decimal space-y-1 text-sm text-muted-foreground">
-                                            <li>
-                                                Click "Connect WhatsApp" button
-                                            </li>
-                                            <li>
-                                                Sign in with your Facebook
-                                                account (if needed)
-                                            </li>
-                                            <li>
-                                                Select your WhatsApp Business
-                                                Account
-                                            </li>
-                                            <li>
-                                                Choose which phone number to use
-                                            </li>
-                                            <li>Grant necessary permissions</li>
-                                            <li>
-                                                Your business will be connected!
-                                            </li>
-                                        </ol>
-                                    </div>
-                                </>
+                                </div>
                             )}
                         </CardContent>
                     </Card>
