@@ -7,7 +7,6 @@ use App\Models\Business;
 use App\Models\ConversationPause;
 use App\Services\AutoReplyService;
 use App\Services\OnboardingService;
-use App\Services\RateLimiterService;
 use App\Services\TenantRouterService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
@@ -19,7 +18,6 @@ class WhatsAppWebhookController extends Controller
         protected WhatsAppService $whatsAppService,
         protected OnboardingService $onboardingService,
         protected AutoReplyService $autoReplyService,
-        protected RateLimiterService $rateLimiter,
         protected TenantRouterService $tenantRouter
     ) {}
 
@@ -181,16 +179,6 @@ class WhatsAppWebhookController extends Controller
                 return;
             }
 
-            // Check burst detection (prevent replying to rapid consecutive messages)
-            if ($this->rateLimiter->isRateLimited($from)) {
-                Log::info('Customer in burst mode, skipping auto-reply (will reply after burst)', [
-                    'from' => $from,
-                    'burst_window_remaining' => $this->rateLimiter->getRemainingCooldown($from),
-                ]);
-
-                return;
-            }
-
             // Ensure business is set (may have been set earlier for onboarding)
             if (! $business) {
                 if (! $phoneNumberId) {
@@ -236,9 +224,6 @@ class WhatsAppWebhookController extends Controller
                 $outboundMessage = $this->whatsAppService->sendMessage($from, $replyMessage, $business);
 
                 if ($outboundMessage) {
-                    // Set rate limit cooldown
-                    $this->rateLimiter->setCooldown($from);
-
                     // Log reply
                     AutoReplyLog::create([
                         'customer_phone' => $from,
@@ -246,7 +231,6 @@ class WhatsAppWebhookController extends Controller
                         'message_text' => $messageText,
                         'reply_text' => $replyMessage,
                         'reply_type' => $replyType,
-                        'rate_limited' => false,
                         'duration_ms' => $duration,
                     ]);
 
