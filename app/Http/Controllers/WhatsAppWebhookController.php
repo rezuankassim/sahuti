@@ -32,14 +32,34 @@ class WhatsAppWebhookController extends Controller
         $token = $request->query('hub_verify_token');
         $challenge = $request->query('hub_challenge');
 
-        if ($mode === 'subscribe' && $token === config('services.whatsapp.verify_token')) {
-            Log::info('WhatsApp webhook verified successfully');
+        if ($mode !== 'subscribe') {
+            Log::warning('WhatsApp webhook verification failed - invalid mode', [
+                'mode' => $mode,
+            ]);
+
+            return response('Forbidden', 403);
+        }
+
+        // Check global verify token first
+        if ($token === config('services.whatsapp.verify_token')) {
+            Log::info('WhatsApp webhook verified successfully (global token)');
 
             return response($challenge, 200)->header('Content-Type', 'text/plain');
         }
 
-        Log::warning('WhatsApp webhook verification failed', [
-            'mode' => $mode,
+        // Check tenant-specific verify tokens
+        $business = Business::where('webhook_verify_token', $token)
+            ->first();
+
+        if ($business) {
+            Log::info('WhatsApp webhook verified successfully (tenant-specific)', [
+                'business_id' => $business->id,
+            ]);
+
+            return response($challenge, 200)->header('Content-Type', 'text/plain');
+        }
+
+        Log::warning('WhatsApp webhook verification failed - token not found', [
             'token' => $token,
         ]);
 
@@ -51,15 +71,26 @@ class WhatsAppWebhookController extends Controller
      */
     public function handle(Request $request)
     {
+        $data = $request->all();
+
+        // Try to determine which business this webhook is for
+        $phoneNumberId = null;
+        $business = null;
+
+        if (isset($data['entry'][0]['changes'][0]['value']['metadata']['phone_number_id'])) {
+            $phoneNumberId = $data['entry'][0]['changes'][0]['value']['metadata']['phone_number_id'];
+            $business = $this->tenantRouter->getBusinessByPhoneNumberId($phoneNumberId);
+        }
+
         // Verify webhook signature
         $signature = $request->header('X-Hub-Signature-256');
-        if ($signature && ! $this->whatsAppService->verifyWebhookSignature($signature, $request->getContent())) {
-            Log::warning('WhatsApp webhook signature verification failed');
+        if ($signature && ! $this->whatsAppService->verifyWebhookSignature($signature, $request->getContent(), $business)) {
+            Log::warning('WhatsApp webhook signature verification failed', [
+                'phone_number_id' => $phoneNumberId,
+            ]);
 
             return response('Unauthorized', 401);
         }
-
-        $data = $request->all();
 
         Log::info('WhatsApp webhook received', ['data' => $data]);
 
@@ -119,16 +150,22 @@ class WhatsAppWebhookController extends Controller
 
             $messageText = $messageData['text']['body'] ?? '';
 
+            // Route to correct business tenant for onboarding
+            $business = null;
+            if ($phoneNumberId) {
+                $business = $this->tenantRouter->getBusinessByPhoneNumberIdWithFallback($phoneNumberId);
+            }
+
             // Check if user wants to start onboarding
             if (strtoupper(trim($messageText)) === 'ONBOARDING') {
-                $this->onboardingService->startOnboarding($from);
+                $this->onboardingService->startOnboarding($from, $business);
 
                 return;
             }
 
             // Check if user has an active onboarding state
             if ($this->onboardingService->hasActiveOnboarding($from)) {
-                $this->onboardingService->processResponse($from, $messageText);
+                $this->onboardingService->processResponse($from, $messageText, $business);
 
                 return;
             }
@@ -150,20 +187,22 @@ class WhatsAppWebhookController extends Controller
                 return;
             }
 
-            // Route to correct business tenant
-            if (! $phoneNumberId) {
-                // Fallback: try to extract from message metadata
-                $phoneNumberId = $messageData['metadata']['phone_number_id'] ?? config('services.whatsapp.phone_number_id');
+            // Ensure business is set (may have been set earlier for onboarding)
+            if (! $business) {
+                if (! $phoneNumberId) {
+                    // Fallback: try to extract from message metadata
+                    $phoneNumberId = $messageData['metadata']['phone_number_id'] ?? config('services.whatsapp.phone_number_id');
+                }
+
+                if (! $phoneNumberId) {
+                    Log::warning('No phone_number_id available for routing');
+
+                    return;
+                }
+
+                // Use tenant router with fallback for single-tenant setups
+                $business = $this->tenantRouter->getBusinessByPhoneNumberIdWithFallback($phoneNumberId);
             }
-
-            if (! $phoneNumberId) {
-                Log::warning('No phone_number_id available for routing');
-
-                return;
-            }
-
-            // Use tenant router with fallback for single-tenant setups
-            $business = $this->tenantRouter->getBusinessByPhoneNumberIdWithFallback($phoneNumberId);
 
             if (! $business) {
                 Log::warning('No business found for phone_number_id', [

@@ -16,7 +16,7 @@ test('can start onboarding process', function () {
 
     $this->whatsAppService->shouldReceive('sendMessage')
         ->once()
-        ->with($phoneNumber, Mockery::pattern('/Welcome to Sahuti/'));
+        ->with($phoneNumber, Mockery::pattern('/Welcome to Sahuti/'), null);
 
     $this->onboardingService->startOnboarding($phoneNumber);
 
@@ -42,7 +42,7 @@ test('prevents duplicate onboarding for already onboarded business', function ()
 
     $this->whatsAppService->shouldReceive('sendMessage')
         ->once()
-        ->with($phoneNumber, Mockery::pattern('/already completed onboarding/'));
+        ->with($phoneNumber, Mockery::pattern('/already completed onboarding/'), null);
 
     $this->onboardingService->startOnboarding($phoneNumber);
 
@@ -53,7 +53,7 @@ test('can process onboarding responses through all steps', function () {
     $phoneNumber = '1234567890';
 
     // Start onboarding
-    $this->whatsAppService->shouldReceive('sendMessage')->times(6);
+    $this->whatsAppService->shouldReceive('sendMessage')->withAnyArgs()->times(6);
 
     $this->onboardingService->startOnboarding($phoneNumber);
 
@@ -108,7 +108,7 @@ test('can confirm and save business profile', function () {
 
     $this->whatsAppService->shouldReceive('sendMessage')
         ->once()
-        ->with($phoneNumber, Mockery::pattern('/Onboarding Complete/'));
+        ->with($phoneNumber, Mockery::pattern('/Onboarding Complete/'), null);
 
     $this->onboardingService->processResponse($phoneNumber, 'YES');
 
@@ -148,7 +148,7 @@ test('can restart onboarding with EDIT command', function () {
 
     $this->whatsAppService->shouldReceive('sendMessage')
         ->once()
-        ->with($phoneNumber, Mockery::pattern('/start over/'));
+        ->with($phoneNumber, Mockery::pattern('/start over/'), null);
 
     $this->onboardingService->processResponse($phoneNumber, 'EDIT');
 

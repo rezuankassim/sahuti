@@ -15,17 +15,40 @@ class OnboardingService
     /**
      * Start onboarding process for a phone number
      */
-    public function startOnboarding(string $phoneNumber): void
+    public function startOnboarding(string $phoneNumber, ?Business $business = null): void
     {
         // Check if already onboarded
         $existingBusiness = Business::where('phone_number', $phoneNumber)->first();
         if ($existingBusiness) {
             $this->whatsAppService->sendMessage(
                 $phoneNumber,
-                "You've already completed onboarding! Your business '{$existingBusiness->name}' is registered."
+                "You've already completed onboarding! Your business '{$existingBusiness->name}' is registered.",
+                $business
             );
 
             return;
+        }
+
+        // If business is provided (tenant-specific onboarding), check if onboarding is locked
+        if ($business) {
+            if ($business->isOnboardingLocked() && ! $business->canOnboard($phoneNumber)) {
+                // Silently ignore - different number trying to onboard
+                Log::info('Onboarding attempt blocked - different number', [
+                    'phone_number' => $phoneNumber,
+                    'onboarding_phone' => $business->onboarding_phone,
+                ]);
+
+                return;
+            }
+
+            // Lock onboarding to this phone number if not already locked
+            if (! $business->isOnboardingLocked()) {
+                $business->update(['onboarding_phone' => $phoneNumber]);
+                Log::info('Onboarding locked to phone number', [
+                    'business_id' => $business->id,
+                    'phone_number' => $phoneNumber,
+                ]);
+            }
         }
 
         // Check if onboarding already in progress
@@ -36,7 +59,8 @@ class OnboardingService
         if ($existingState) {
             $this->whatsAppService->sendMessage(
                 $phoneNumber,
-                "You already have an onboarding in progress. Let's continue from where we left off.\n\n".$this->getPromptForStep($existingState->current_step)
+                "You already have an onboarding in progress. Let's continue from where we left off.\n\n".$this->getPromptForStep($existingState->current_step),
+                $business
             );
 
             return;
@@ -53,16 +77,20 @@ class OnboardingService
         // Send welcome message
         $this->whatsAppService->sendMessage(
             $phoneNumber,
-            $this->getPromptForStep(OnboardingState::STEP_NAME)
+            $this->getPromptForStep(OnboardingState::STEP_NAME),
+            $business
         );
 
-        Log::info('Onboarding started', ['phone_number' => $phoneNumber]);
+        Log::info('Onboarding started', [
+            'phone_number' => $phoneNumber,
+            'business_id' => $business?->id,
+        ]);
     }
 
     /**
      * Process user response based on current onboarding step
      */
-    public function processResponse(string $phoneNumber, string $message): void
+    public function processResponse(string $phoneNumber, string $message, ?Business $business = null): void
     {
         $state = OnboardingState::where('phone_number', $phoneNumber)
             ->where('is_complete', false)
@@ -74,9 +102,19 @@ class OnboardingService
             return;
         }
 
+        // Check if this number is allowed to onboard (tenant-specific check)
+        if ($business && ! $business->canOnboard($phoneNumber)) {
+            Log::info('Onboarding response blocked - different number', [
+                'phone_number' => $phoneNumber,
+                'onboarding_phone' => $business->onboarding_phone,
+            ]);
+
+            return;
+        }
+
         // Handle confirmation step
         if ($state->current_step === OnboardingState::STEP_CONFIRM) {
-            $this->handleConfirmation($state, $message);
+            $this->handleConfirmation($state, $message, $business);
 
             return;
         }
@@ -96,7 +134,7 @@ class OnboardingService
                 'current_step' => $nextStep,
             ]);
 
-            $this->whatsAppService->sendMessage($phoneNumber, $summary);
+            $this->whatsAppService->sendMessage($phoneNumber, $summary, $business);
         } else {
             // Update state and send next question
             $state->update([
@@ -106,7 +144,8 @@ class OnboardingService
 
             $this->whatsAppService->sendMessage(
                 $phoneNumber,
-                $this->getPromptForStep($nextStep)
+                $this->getPromptForStep($nextStep),
+                $business
             );
         }
 
@@ -187,18 +226,19 @@ class OnboardingService
     /**
      * Handle YES/EDIT confirmation
      */
-    protected function handleConfirmation(OnboardingState $state, string $message): void
+    protected function handleConfirmation(OnboardingState $state, string $message, ?Business $business = null): void
     {
         $response = strtoupper(trim($message));
 
         if ($response === 'YES') {
-            $this->saveBusinessProfile($state->phone_number, $state->collected_data);
+            $this->saveBusinessProfile($state->phone_number, $state->collected_data, $business);
             $state->update(['is_complete' => true]);
 
             $this->whatsAppService->sendMessage(
                 $state->phone_number,
                 "✅ *Onboarding Complete!*\n\n".
-                'Your business profile has been successfully saved. Welcome to Sahuti! 🎉'
+                'Your business profile has been successfully saved. Welcome to Sahuti! 🎉',
+                $business
             );
 
             Log::info('Onboarding completed', ['phone_number' => $state->phone_number]);
@@ -211,14 +251,16 @@ class OnboardingService
 
             $this->whatsAppService->sendMessage(
                 $state->phone_number,
-                "No problem! Let's start over.\n\n".$this->getPromptForStep(OnboardingState::STEP_NAME)
+                "No problem! Let's start over.\n\n".$this->getPromptForStep(OnboardingState::STEP_NAME),
+                $business
             );
 
             Log::info('Onboarding restarted', ['phone_number' => $state->phone_number]);
         } else {
             $this->whatsAppService->sendMessage(
                 $state->phone_number,
-                'Please reply with *YES* to confirm or *EDIT* to start over.'
+                'Please reply with *YES* to confirm or *EDIT* to start over.',
+                $business
             );
         }
     }
@@ -226,7 +268,7 @@ class OnboardingService
     /**
      * Save business profile to database
      */
-    protected function saveBusinessProfile(string $phoneNumber, array $data): void
+    protected function saveBusinessProfile(string $phoneNumber, array $data, ?Business $business = null): void
     {
         // Parse services with prices (Format: "Service Name - Price")
         $servicesText = $data[OnboardingState::STEP_SERVICES] ?? '';
@@ -273,16 +315,31 @@ class OnboardingService
             }
         }
 
-        Business::create([
-            'phone_number' => $phoneNumber,
-            'name' => $data[OnboardingState::STEP_NAME] ?? '',
-            'services' => $services,
-            'areas' => array_values($areas),
-            'operating_hours' => $operatingHours,
-            'booking_method' => $data[OnboardingState::STEP_BOOKING] ?? '',
-            'profile_data' => $data,
-            'is_onboarded' => true,
-        ]);
+        // If business already exists (tenant onboarding), update it
+        if ($business) {
+            $business->update([
+                'phone_number' => $phoneNumber,
+                'name' => $data[OnboardingState::STEP_NAME] ?? '',
+                'services' => $services,
+                'areas' => array_values($areas),
+                'operating_hours' => $operatingHours,
+                'booking_method' => $data[OnboardingState::STEP_BOOKING] ?? '',
+                'profile_data' => $data,
+                'is_onboarded' => true,
+            ]);
+        } else {
+            // Create new business for global onboarding
+            Business::create([
+                'phone_number' => $phoneNumber,
+                'name' => $data[OnboardingState::STEP_NAME] ?? '',
+                'services' => $services,
+                'areas' => array_values($areas),
+                'operating_hours' => $operatingHours,
+                'booking_method' => $data[OnboardingState::STEP_BOOKING] ?? '',
+                'profile_data' => $data,
+                'is_onboarded' => true,
+            ]);
+        }
 
         Log::info('Business profile saved', [
             'phone_number' => $phoneNumber,

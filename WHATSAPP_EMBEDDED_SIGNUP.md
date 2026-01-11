@@ -1,5 +1,7 @@
 # WhatsApp Embedded Signup Integration
 
+> **⚠️ IMPORTANT**: Meta has updated their interface from "Products" to "Use Cases". Please see [META_APP_SETUP_2026.md](./META_APP_SETUP_2026.md) for the latest configuration guide reflecting the new interface.
+
 This document explains how to set up and use the WhatsApp Embedded Signup feature, which allows each business to connect their own WhatsApp Business Account to the platform.
 
 ## Table of Contents

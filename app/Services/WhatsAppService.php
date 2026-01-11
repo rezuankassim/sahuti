@@ -99,9 +99,10 @@ class WhatsAppService
     /**
      * Verify webhook signature
      */
-    public function verifyWebhookSignature(string $signature, string $payload): bool
+    public function verifyWebhookSignature(string $signature, string $payload, ?Business $business = null): bool
     {
-        $expectedSignature = 'sha256='.hash_hmac('sha256', $payload, $this->appSecret);
+        $appSecret = $business?->getMetaAppSecret() ?? $this->appSecret;
+        $expectedSignature = 'sha256='.hash_hmac('sha256', $payload, $appSecret);
 
         return hash_equals($expectedSignature, $signature);
     }
